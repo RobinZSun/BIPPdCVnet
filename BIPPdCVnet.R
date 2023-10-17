@@ -117,6 +117,7 @@ ggcorrplot::ggcorrplot(cor(cbind(odat, odat_efa)))
 # Control Variables (e.g., sex, age, etc.)to be finalize by experts ####
 # outcome adjustment
 # iterate through outcome variables:
+# raw outcomes (6 variables)
 odat_adj <- map_dfc(odat,
                     ~ {
                       # fit model (outcomes by assessment at age8):
@@ -128,9 +129,10 @@ odat_adj <- map_dfc(odat,
                     }
 )
 
+# factor outcomes (f1 and f2)
 odat_efa_adj <- map_dfc(odat_efa,
                         ~ {
-                          # fit model:
+                          # fit model (outcomes by assessment at age8):
                           mod <- lm(y ~ ., data = data.frame(y = .x, ocon))
                           # extract residuals adjusting for CV
                           r <- resid(mod)
@@ -139,4 +141,56 @@ odat_efa_adj <- map_dfc(odat_efa,
                         }
 )
 
+# predictor adjustment (to be finalise)
+# Always adjust for Sex, Ethnicity, and low_mat_edu
+# adjust some predictors for Age2 and Age4
+# some predictors should not be adjusted for age.
 
+# set adjustment for age4 as default:
+preds_metadata <- data.frame(pred = colnames(pdat),type = "Age4")
+
+# birth weight, IMD, gestational age should not be adjusted:
+preds_metadata$type[colnames(pdat) %in% c("IMD", "bir_weight", "GA")] <- "none"
+
+# Age 2 vars: Bayley, PARCA, Mchat
+preds_metadata$type[starts_with("BY", vars = colnames(pdat))] <- "Age2"
+preds_metadata$type[starts_with("PR", vars = colnames(pdat))] <- "Age2"
+preds_metadata$type[starts_with("Mchat", vars = colnames(pdat))] <- "Age2"
+
+#Adjust Age4 predictors: WPPSI, BRIEF, SRS, ECBQ, SDQ
+pdat_adj <- map2_dfc(pdat,
+                     preds_metadata$type,
+                     ~ {
+                       cvars <- switch(
+                         .y,
+                         none = pcon[, !(colnames(pcon) %in% c("Age2", "Age4"))],
+                         Age2 = pcon[, !(colnames(pcon) %in% c("Age4"))],
+                         Age4 = pcon[, !(colnames(pcon) %in% c("Age2"))]
+                       )
+                       # to debug / check:
+                       cat(paste0("cvar_ncol: ", ncol(cvars), "\n"))
+                       # fit model:
+                       mod <- lm(y ~ ., data = data.frame(y = .x, cvars))
+                       # extract residuals adjusting for CV
+                       r <- resid(mod)
+                       # add back the intercept == mean score:
+                       r + coef(mod)[[1]]
+                     }
+)
+
+# Write out data####
+
+save(
+  # the (pretty much) raw dataset:
+  dt,
+  # outcome variables with and without adjustment for control variables
+  odat, odat_adj, 
+  # Factors derived from outcome variables with and without adjustment for
+  #    control variables:
+  odat_efa, odat_efa_adj,
+  # predictor variables with and without adjustment for control variables:
+  pdat, pdat_adj,
+  # control variables for reference:
+  ocon, pcon,
+  # Write above as compressed R objects to following file:
+  file = "data/example_dCVnet_prepped.RData")
