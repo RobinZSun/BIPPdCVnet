@@ -114,7 +114,29 @@ ggcorrplot::ggcorrplot(cor(cbind(odat, odat_efa)))
 # So for outcome we can either use raw variables (odat),
 #                     or a two factor solution (odat_efa).
 
-# Control Variables to be determine by experts ####
-# outcome adjustment ----
+# Control Variables (e.g., sex, age, etc.)to be finalize by experts ####
+# outcome adjustment
+# iterate through outcome variables:
+odat_adj <- map_dfc(odat,
+                    ~ {
+                      # fit model (outcomes by assessment at age8):
+                      mod <- lm(y ~ ., data = data.frame(y = .x, ocon))
+                      # extract residuals adjusting for CV
+                      r <- resid(mod)
+                      # add back the intercept == mean score:
+                      r + coef(mod)[[1]]
+                    }
+)
+
+odat_efa_adj <- map_dfc(odat_efa,
+                        ~ {
+                          # fit model:
+                          mod <- lm(y ~ ., data = data.frame(y = .x, ocon))
+                          # extract residuals adjusting for CV
+                          r <- resid(mod)
+                          # add back the intercept == mean score:
+                          r + coef(mod)[[1]]
+                        }
+)
 
 
