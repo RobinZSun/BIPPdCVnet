@@ -1,9 +1,12 @@
 setwd("C:\\R wd\\BIPP_dCVnet")
 
-##load necessary packages####
+# load necessary packages####
 library(tidyverse)
 library(lavaan)
-
+#install dCVnet from Github
+install.packages("remotes")
+remotes::install_local("dCVnet_1.2.0.tar.gz", dependencies = TRUE, build_vignettes = TRUE)
+library(dCVnet)
 
 # Inspect Data#####
 load("data/zpsypred.RData")
@@ -15,7 +18,7 @@ mice::md.pattern(dt)
 mice::md.pattern(zdt)
 #no missing values
 
-#Data adjustments####
+# Data adjustments####
 #code three factors (Sex, Ethnicity and Mother_Edu) to numeric
 
 levels(dt$Sex)
@@ -49,7 +52,7 @@ with(dt, table(low_mat_edu, Mother_Edu))
 #           0        7       22        0        0       3
 #           1        0        0      119        2       0 
 
-# Separate outcome and predictors ####
+## Separate outcome and predictors ####
 # the three outcome variables are psychiatric assessments measured at 8: 
 # SDQ (internalizing and externalizing)
 # TMCQ (surgency, effortful control & negative affect)
@@ -76,7 +79,7 @@ pdat <- dt %>%
   select(!all_of(colnames(pcon))) %>% 
   select(-Mother_Edu)
 
-# Outcome dimension reduction ####
+## Outcome dimension reduction ####
 # Inspect bivariate relationships:
 odat %>% 
   car::scatterplotMatrix()
@@ -114,7 +117,7 @@ ggcorrplot::ggcorrplot(cor(cbind(odat, odat_efa)))
 # So for outcome we can either use raw variables (odat),
 #                     or a two factor solution (odat_efa).
 
-# Control Variables (e.g., sex, age, etc.)to be finalize by experts ####
+## Control Variables (e.g., sex, age, etc.)to be finalize by experts ####
 # outcome adjustment
 # iterate through outcome variables:
 # raw outcomes (6 variables)
@@ -194,3 +197,67 @@ save(
   ocon, pcon,
   # Write above as compressed R objects to following file:
   file = "data/example_dCVnet_prepped.RData")
+
+
+# dCVnet analysis start
+load("data/example_dCVnet_prepped.RData")
+
+## data description####
+# # dt: the raw dataset
+# # odat, odat_adj: 6 outcome variables with/without adjustment
+# # odat_efa, odat_efa_adj: 2 representative outcome factors with/without adjustment
+# # pdat, pdat_adj: predictors with/without adjustment
+# # ocon, pcon: control variables for reference
+
+## model strategy####
+# # outcome:
+#   - 5 separate models for variables in odat_adj
+#   - 1 joint model (5 outcomes) for odat_adj
+#   - 2 separate models for odat_efa_adj
+#   - 1 joint model (2 outcomes) for odat_efa_adj
+# # predictors:
+#   - All predictors available in pdat_adj
+
+## model parameters settings####
+#   value of k for inner + outer loop
+#     - defaults (10-fold) are sensible.
+#   resolution of the grid for lambda and alpha
+#     - more is always better for lambda 100 is standard, but we can run 1000.
+#     - typically varying alpha makes little difference. Do 0.5
+
+# model running####
+# externalising only:
+m_f1 <- dCVnet(
+  y = odat_efa_adj$f1,
+  data = pdat_adj,
+  family = "gaussian",
+  alphalist = 0.2,
+  nlambda = 100,
+  nrep_inner = 30,
+  nrep_outer = 100
+)
+save(m_f1, file = "models/example_dCVnet_m_f1.RData")
+
+# internalising only:
+m_f2 <- dCVnet(
+  y = odat_efa_adj$f2,
+  data = pdat_adj,
+  family = "gaussian",
+  alphalist = 0.2,
+  nlambda = 100,
+  nrep_inner = 30,
+  nrep_outer = 100
+)
+save(m_f2, file = "models/example_dCVnet_m_f2.RData")
+
+# joint internalising and externalising factors:
+m_fjoint <- dCVnet(
+  y = as.matrix(odat_efa_adj),
+  data = pdat_adj,
+  family = "mgaussian",
+  alphalist = 0.2,
+  nlambda = 100,
+  nrep_inner = 30,
+  nrep_outer = 100
+)
+save(m_fjoint, file = "models/example_dCVnet_m_fjoint.RData")
