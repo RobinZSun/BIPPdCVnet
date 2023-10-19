@@ -4,7 +4,8 @@ setwd("C:\\R wd\\BIPP_dCVnet")
 library(tidyverse)
 library(lavaan)
 #install dCVnet from Github
-install.packages("remotes")
+remotes::install_github("AndrewLawrence/dCVnet", dependencies = TRUE, build_vignettes = TRUE)
+remotes::install_github("AndrewLawrence/dCVnet@dev", dependencies = TRUE, build_vignettes = TRUE)
 remotes::install_local("dCVnet_1.2.0.tar.gz", dependencies = TRUE, build_vignettes = TRUE)
 library(dCVnet)
 
