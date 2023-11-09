@@ -3,14 +3,12 @@ setwd("C:\\R wd\\BIPP_dCVnet")
 # load necessary packages####
 library(tidyverse)
 library(lavaan)
-#install dCVnet from Github
-remotes::install_github("AndrewLawrence/dCVnet", dependencies = TRUE, build_vignettes = TRUE)
-remotes::install_github("AndrewLawrence/dCVnet@dev", dependencies = TRUE, build_vignettes = TRUE)
-remotes::install_local("dCVnet_1.2.0.tar.gz", dependencies = TRUE, build_vignettes = TRUE)
+# #install dCVnet from Github
+# #remotes::install_github("AndrewLawrence/dCVnet", dependencies = TRUE, build_vignettes = FALSE)
 library(dCVnet)
-
+library(patchwork)
 # Inspect Data#####
-load("data/zpsypred.RData")
+load("data/psypred.RData")
 # Numeric variables apart from IMD and Age were z-scored.
 # The z-scores are based on this exact sample.
 
@@ -60,7 +58,7 @@ with(dt, table(low_mat_edu, Mother_Edu))
 # and SRS; All of them are raw scores 
 
 # outcome data:
-ovars <- c("srs8", "sdq8int", "sdq8ext", "TMCQ.SU", "TMCQ.EC", "TMCQ.NA")
+ovars <- c("srs8", "sdq8int", "sdq8ext", "TMCQ.SU", "TMCQ.EC", "TMCQ.NA","scas8_total")
 odat <- dt %>% select(one_of(ovars))
 
 # Control Variables: extract and center 
@@ -70,7 +68,7 @@ ocon <- dt %>%
   mutate_all(scale, center = TRUE, scale = FALSE)
 # Control Variable for predictors:
 pcon <- dt %>% 
-  select(Age2, Age4, Sex, Ethnicity, low_mat_edu) %>% 
+  select(Age2, Age4, Sex, Ethnicity, low_mat_edu, IMD, GA) %>% 
   mutate_all(scale, center = TRUE, scale = FALSE)
 
 # predictor data:
@@ -103,11 +101,11 @@ summary(oefa) # agrees that two factors is good.
 summary(oefa[[2]])
 
 # Solution identifies:
-#   f1: Externalizing + Surgency + lack of Effortful Control
-#   f2: Internalizing + SRS + Negative affect + lack of Surgency
+#   f1: Externalizing + Surgency + lack of Effortful Control + Negative affect
+#   f2: Internalizing + SRS + Negative affect + lack of Surgency + Anxiety
 #
 # note: SU loads on both in opposite directions
-#       EC loads on both in same direction, stronger to f1=externalizing.
+#       NA loads on both in same direction, stronger to f2=internalizing.
 
 # Extract scores for two factors:
 odat_efa <- lavPredict(oefa[[2]]) %>% as.data.frame()
@@ -146,15 +144,15 @@ odat_efa_adj <- map_dfc(odat_efa,
 )
 
 # predictor adjustment (to be finalise)
-# Always adjust for Sex, Ethnicity, and low_mat_edu
+# Always adjust for Sex, Ethnicity, and low_mat_edu, GA and IMD
 # adjust some predictors for Age2 and Age4
 # some predictors should not be adjusted for age.
 
 # set adjustment for age4 as default:
 preds_metadata <- data.frame(pred = colnames(pdat),type = "Age4")
 
-# birth weight, IMD, gestational age should not be adjusted:
-preds_metadata$type[colnames(pdat) %in% c("IMD", "bir_weight", "GA")] <- "none"
+# birth weight should not be adjusted:
+preds_metadata$type[colnames(pdat) %in% c("bir_weight")] <- "none"
 
 # Age 2 vars: Bayley, PARCA, Mchat
 preds_metadata$type[starts_with("BY", vars = colnames(pdat))] <- "Age2"
@@ -197,22 +195,22 @@ save(
   # control variables for reference:
   ocon, pcon,
   # Write above as compressed R objects to following file:
-  file = "data/example_dCVnet_prepped.RData")
+  file = "data/dCVnet_prepped.RData")
 
 
 # dCVnet analysis start
-load("data/example_dCVnet_prepped.RData")
+load("data/dCVnet_prepped.RData")
 
 ## data description####
 # # dt: the raw dataset
-# # odat, odat_adj: 6 outcome variables with/without adjustment
+# # odat, odat_adj: 7 outcome variables with/without adjustment
 # # odat_efa, odat_efa_adj: 2 representative outcome factors with/without adjustment
 # # pdat, pdat_adj: predictors with/without adjustment
 # # ocon, pcon: control variables for reference
 
 ## model strategy####
 # # outcome:
-#   - 5 separate models for variables in odat_adj
+#   - 7 separate models for variables in odat_adj
 #   - 1 joint model (5 outcomes) for odat_adj
 #   - 2 separate models for odat_efa_adj
 #   - 1 joint model (2 outcomes) for odat_efa_adj
@@ -237,7 +235,7 @@ m_f1 <- dCVnet(
   nrep_inner = 30,
   nrep_outer = 100
 )
-save(m_f1, file = "models/example_dCVnet_m_f1.RData")
+save(m_f1, file = "dCVnet_m_f1.RData")
 
 # internalising only:
 m_f2 <- dCVnet(
@@ -249,7 +247,7 @@ m_f2 <- dCVnet(
   nrep_inner = 30,
   nrep_outer = 100
 )
-save(m_f2, file = "models/example_dCVnet_m_f2.RData")
+save(m_f2, file = "dCVnet_m_f2.RData")
 
 # joint internalising and externalising factors:
 m_fjoint <- dCVnet(
@@ -261,4 +259,117 @@ m_fjoint <- dCVnet(
   nrep_inner = 30,
   nrep_outer = 100
 )
-save(m_fjoint, file = "models/example_dCVnet_m_fjoint.RData")
+save(m_fjoint, file = "dCVnet_m_fjoint.RData")
+
+# Results output####
+theme_set(theme_light())
+
+# #load models:
+#   f1 only, all predictors:
+load("models/example_dCVnet_m_f1.RData")
+ 
+#   f2 only, all predictors:
+load("models/example_dCVnet_m_f2.RData")
+
+#   joint f1,f2, all predictors:
+load("models/example_dCVnet_m_fjoint.RData")
+
+# # Inspect prediction performance 
+
+# extract cross-validated prediction performance and make tidy data for plotting:
+
+# Helper functions:
+tidy_gaussian_output <- function(obj, outcome_label) {
+  obj %>% 
+    pivot_longer(starts_with("Rep")) %>% 
+    mutate(outcome = outcome_label, modeltype = "separate")
+}
+tidy_mgaussian_output <- function(obj) {
+  obj %>% pivot_longer(starts_with("Rep")) %>% 
+    separate(Measure, into = c("outcome", "Measure"), extra = "merge") %>%
+    filter(outcome != "mean") %>% 
+    mutate(modeltype = "joint")
+}
+
+# assemble tidy performance data:
+pps <- list(
+  # outcome 1 separate model:
+  m_f1 = m_f1 %>% 
+    performance() %>% 
+    summary() %>% 
+    tidy_gaussian_output("f1"),
+  # outcome 2 separate model:
+  m_f2 = m_f2 %>% 
+    performance() %>% 
+    summary() %>% 
+    tidy_gaussian_output("f2"),
+  # outcomes 1&2 joint model:
+  m_f3 = m_fjoint %>% 
+    performance() %>% 
+    summary() %>% 
+    tidy_mgaussian_output()
+) %>%
+  # merge into single data.frame:
+  data.table::rbindlist(use.names = TRUE) %>% 
+  as.data.frame()
+
+# Create a plot of cross-validated model performance:
+pps %>% 
+  # prep:
+  # Select a couple of interesting measures:
+  filter(Measure %in% c("SDScaledRMSE", "SDScaledMAE", "r2")) %>%
+  # Set factor names for measure:
+  mutate(Measure = factor(Measure, levels = c("SDScaledRMSE", "SDScaledMAE", "r2"))) %>%
+  # Set factor names for model type:
+  mutate(modeltype = factor(modeltype, levels= c("separate", "joint"))) %>%
+  # Set factor names for the prediction model outcome:
+  mutate(outcome = factor(outcome,
+                          levels = c("f1", "f2"),
+                          labels = c("f1\nexternalising",
+                                     "f2\ninternalising"))) %>%
+  # Plot:
+  ggplot(aes(y = value, x = outcome, colour = modeltype)) +
+  # Error bars shows 2.5 and 97.5 percentiles of the repeated CV:
+  stat_summary(geom = "errorbar", fun.data = median_hilow,
+               position = position_dodge(width = 0.5), width = 0.2) +
+  # Point shows the mean performance:
+  stat_summary(geom = "point", fun.data = mean_sdl,
+               position = position_dodge(width = 0.5),
+               size = 2) +
+  ggsci::scale_colour_d3() +
+  facet_wrap(~ Measure, scales = "free")
+ggsave("output/example_dCVnet_performance.png", height = 4, width = 11)
+
+# Interpretation:
+# 
+# The range of prediction performances excluded R2 = 0.0 in all cases.
+#   thus cross-validated prediction was better than chance.
+# 
+# RMSE, MAE and R2 all showed better prediction performance for f2 than f1
+#   considering MAE:
+#     predictions typically lie within 0.63 SD units of the true value
+#     for f2 (internalising), but 0.7 SD units for f1 (externalising).
+#   
+# There was a trend for worse CV performence when variables were jointly 
+#   relative to separately modelled. Confidence limits overlapped indicating 
+#   this is not conclusive. I would ignore joint modelling for now and consider
+#   only separate models.
+
+# Inspect coefficients ----
+
+# Merge and format two models:
+cpd <- list(
+  f1 = m_f1 %>%
+    coefficients_summary(m_f1) %>%
+    select(Predictor, ProductionModel) %>%
+    mutate(Outcome = "f1"),
+  f2 = m_f2 %>%
+    coefficients_summary(m_f1) %>%
+    select(Predictor, ProductionModel) %>%
+    mutate(Outcome = "f2")
+) %>% do.call(rbind, .) %>%
+  pivot_wider(names_from = Outcome, values_from = ProductionModel)
+
+# Unselected coefficients have the "exact" value 0.000...
+#   we will replace this value with "-" for display:
+knitr::kable(cpd) %>% gsub("0.0000000", "        -", .)
